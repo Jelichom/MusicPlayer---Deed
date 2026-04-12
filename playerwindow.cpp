@@ -86,7 +86,8 @@ PlayerWindow::PlayerWindow(QWidget *parent)
       coverLabel(nullptr),
       titleLabel(nullptr),
       albumLabel(nullptr),
-      timeLabel(nullptr),
+      timeLabelLeft(nullptr),
+      timeLabelRight(nullptr),
       volumePercentLabel(nullptr),
       positionSlider(nullptr),
       volumeSlider(nullptr),
@@ -176,7 +177,9 @@ void PlayerWindow::setupUi()
     headerLayout->addWidget(coverLabel, 0, Qt::AlignLeft | Qt::AlignVCenter);
     headerLayout->addLayout(infoLayout, 1);
 
-    timeLabel = new QLabel("00:00 / 00:00", this);
+    timeLabelLeft = new QLabel("00:00", this);
+    timeLabelRight = new QLabel("00:00", this);
+    timeLabelRight->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
 
     positionSlider = new ClickableSlider(Qt::Horizontal, this);
     positionSlider->setRange(0, 0);
@@ -226,7 +229,11 @@ void PlayerWindow::setupUi()
     bottomLayout->addWidget(nextButton);
     bottomLayout->addWidget(stopButton);
 
-    bottomLayout->addStretch(1);
+    bottomLayout->addSpacing(12);
+    bottomLayout->addWidget(timeLabelLeft);
+    bottomLayout->addWidget(positionSlider, 1);
+    bottomLayout->addWidget(timeLabelRight);
+    bottomLayout->addSpacing(12);
 
     auto *separator = new QFrame(this);
     separator->setFrameShape(QFrame::VLine);
@@ -243,8 +250,6 @@ void PlayerWindow::setupUi()
     bottomLayout->addWidget(volumePercentLabel);
 
     mainLayout->addWidget(headerWidget);
-    mainLayout->addWidget(positionSlider);
-    mainLayout->addWidget(timeLabel);
     mainLayout->addWidget(playlistWidget, 1);
     mainLayout->addLayout(bottomLayout);
 }
@@ -488,7 +493,8 @@ QString PlayerWindow::formatTime(qint64 ms) const
 
 void PlayerWindow::updateTimeLabel(qint64 position, qint64 duration)
 {
-    timeLabel->setText(formatTime(position) + " / " + formatTime(duration));
+    timeLabelLeft->setText(formatTime(position));
+    timeLabelRight->setText(formatTime(duration));
 }
 
 void PlayerWindow::updateVolumeLabel()
