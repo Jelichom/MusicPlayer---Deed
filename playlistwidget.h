@@ -5,6 +5,8 @@
 #include <QDragMoveEvent>
 #include <QDropEvent>
 #include <QListWidget>
+#include <QPoint>
+#include <QStringList>
 
 class PlaylistWidget : public QListWidget
 {
@@ -21,6 +23,9 @@ protected:
     void dragEnterEvent(QDragEnterEvent *event) override;
     void dragMoveEvent(QDragMoveEvent *event) override;
     void dropEvent(QDropEvent *event) override;
+
+private:
+    int dropRowFromPosition(const QPoint &pos) const;
 };
 
 #endif

@@ -5,6 +5,8 @@
 #include <QDropEvent>
 #include <QFileInfo>
 #include <QMimeData>
+#include <QModelIndex>
+#include <QRect>
 #include <QUrl>
 
 PlaylistWidget::PlaylistWidget(QWidget *parent)
@@ -12,6 +14,22 @@ PlaylistWidget::PlaylistWidget(QWidget *parent)
 {
     setAcceptDrops(true);
     viewport()->setAcceptDrops(true);
+    setDropIndicatorShown(true);
+}
+
+int PlaylistWidget::dropRowFromPosition(const QPoint &pos) const
+{
+    const QModelIndex idx = indexAt(pos);
+    if (!idx.isValid()) {
+        return count();
+    }
+
+    const QRect rect = visualRect(idx);
+    if (pos.y() > rect.center().y()) {
+        return idx.row() + 1;
+    }
+
+    return idx.row();
 }
 
 void PlaylistWidget::dragEnterEvent(QDragEnterEvent *event)
@@ -27,6 +45,7 @@ void PlaylistWidget::dragEnterEvent(QDragEnterEvent *event)
 void PlaylistWidget::dragMoveEvent(QDragMoveEvent *event)
 {
     if (event->mimeData()->hasUrls()) {
+        setDropIndicatorShown(true);
         event->acceptProposedAction();
         return;
     }
@@ -53,11 +72,7 @@ void PlaylistWidget::dropEvent(QDropEvent *event)
         }
 
         if (!files.isEmpty()) {
-            int row = indexAt(event->position().toPoint()).row();
-            if (row < 0) {
-                row = count(); // drop below all items => append
-            }
-
+            const int row = dropRowFromPosition(event->position().toPoint());
             emit externalFilesDropped(files, row);
             event->acceptProposedAction();
             return;
