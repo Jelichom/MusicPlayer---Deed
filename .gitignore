@@ -1,0 +1,23 @@
+# Build
+build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Qt
+*.autosave
+*.user
+*.pro.user*
+
+# Compiled
+*.o
+*.so
+*.a
+*.out
+
+# Autogen (Qt)
+*_autogen/
+
+# OS junk
+.DS_Store
