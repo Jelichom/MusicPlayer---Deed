@@ -195,7 +195,7 @@ void PlayerWindow::setupUi()
     playlistWidget->setMinimumHeight(220);
     playlistWidget->setSelectionMode(QAbstractItemView::ExtendedSelection);
     playlistWidget->setContextMenuPolicy(Qt::CustomContextMenu);
-    playlistWidget->setDragDropMode(QAbstractItemView::InternalMove);
+    playlistWidget->setDragDropMode(QAbstractItemView::DragDrop);
     playlistWidget->setDefaultDropAction(Qt::MoveAction);
     playlistWidget->setDragEnabled(true);
     playlistWidget->setAcceptDrops(true);
