@@ -1,12 +1,17 @@
 #include "playlistwidget.h"
 
 #include <QDragEnterEvent>
+#include <QDragLeaveEvent>
 #include <QDragMoveEvent>
 #include <QDropEvent>
 #include <QFileInfo>
 #include <QMimeData>
 #include <QModelIndex>
+#include <QPainter>
+#include <QPaintEvent>
+#include <QPen>
 #include <QRect>
+#include <QStyleOptionViewItem>
 #include <QUrl>
 
 PlaylistWidget::PlaylistWidget(QWidget *parent)
@@ -45,12 +50,21 @@ void PlaylistWidget::dragEnterEvent(QDragEnterEvent *event)
 void PlaylistWidget::dragMoveEvent(QDragMoveEvent *event)
 {
     if (event->mimeData()->hasUrls()) {
-        setDropIndicatorShown(true);
+        externalDropIndicatorRow = dropRowFromPosition(event->position().toPoint());
+        viewport()->update();
         event->acceptProposedAction();
         return;
     }
 
+    externalDropIndicatorRow = -1;
     QListWidget::dragMoveEvent(event);
+}
+
+void PlaylistWidget::dragLeaveEvent(QDragLeaveEvent *event)
+{
+    externalDropIndicatorRow = -1;
+    viewport()->update();
+    QListWidget::dragLeaveEvent(event);
 }
 
 void PlaylistWidget::dropEvent(QDropEvent *event)
@@ -73,12 +87,40 @@ void PlaylistWidget::dropEvent(QDropEvent *event)
 
         if (!files.isEmpty()) {
             const int row = dropRowFromPosition(event->position().toPoint());
+            externalDropIndicatorRow = -1;
+            viewport()->update();
             emit externalFilesDropped(files, row);
             event->acceptProposedAction();
             return;
         }
     }
 
+    externalDropIndicatorRow = -1;
     QListWidget::dropEvent(event);
     emit itemsReordered();
+}
+
+void PlaylistWidget::paintEvent(QPaintEvent *event)
+{
+    QListWidget::paintEvent(event);
+
+    if (externalDropIndicatorRow < 0) {
+        return;
+    }
+
+    QPainter painter(viewport());
+    QPen pen(palette().highlight().color(), 2);
+    painter.setPen(pen);
+
+    int y = 0;
+
+    if (count() == 0) {
+        y = 2;
+    } else if (externalDropIndicatorRow >= count()) {
+        y = visualItemRect(item(count() - 1)).bottom() + 1;
+    } else {
+        y = visualItemRect(item(externalDropIndicatorRow)).top();
+    }
+
+    painter.drawLine(2, y, viewport()->width() - 2, y);
 }

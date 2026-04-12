@@ -2,6 +2,7 @@
 #define PLAYLISTWIDGET_H
 
 #include <QDragEnterEvent>
+#include <QDragLeaveEvent>
 #include <QDragMoveEvent>
 #include <QDropEvent>
 #include <QListWidget>
@@ -22,10 +23,14 @@ signals:
 protected:
     void dragEnterEvent(QDragEnterEvent *event) override;
     void dragMoveEvent(QDragMoveEvent *event) override;
+    void dragLeaveEvent(QDragLeaveEvent *event) override;
     void dropEvent(QDropEvent *event) override;
+    void paintEvent(QPaintEvent *event) override;
 
 private:
     int dropRowFromPosition(const QPoint &pos) const;
+
+    int externalDropIndicatorRow = -1;
 };
 
 #endif
