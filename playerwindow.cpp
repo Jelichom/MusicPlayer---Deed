@@ -69,7 +69,7 @@ namespace {
 constexpr int kFilePathRole = Qt::UserRole + 1;
 constexpr int kHeaderMinHeight = 88;
 constexpr int kHeaderMaxHeight = 150;
-constexpr int kCoverMinSize = 64;
+constexpr int kCoverMinSize = 88;
 constexpr int kCoverMaxSize = 124;
 constexpr const char *kUserAgent = "Deed/1.0 (Qt6; Linux)";
 constexpr uint32_t kInvalidSinkInputIndex = static_cast<uint32_t>(-1);
