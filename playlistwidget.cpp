@@ -109,7 +109,8 @@ void PlaylistWidget::paintEvent(QPaintEvent *event)
     }
 
     QPainter painter(viewport());
-    QPen pen(palette().highlight().color(), 2);
+    QPen pen(QColor(255, 255, 255, 220), 3);
+    pen.setCapStyle(Qt::RoundCap);
     painter.setPen(pen);
 
     int y = 0;
