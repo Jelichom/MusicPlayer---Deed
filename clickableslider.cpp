@@ -33,10 +33,13 @@ int ClickableSlider::pixelPosToRangeValue(int pos) const
         sliderMax = groove.bottom() - sliderLength + 1;
     }
 
+    const int halfHandleLength = sliderLength / 2;
+    const int positionFromHandleOrigin = pos - sliderMin - halfHandleLength;
+
     return QStyle::sliderValueFromPosition(
         minimum(),
         maximum(),
-        pos - sliderMin,
+        positionFromHandleOrigin,
         sliderMax - sliderMin,
         option.upsideDown
     );
@@ -49,10 +52,25 @@ void ClickableSlider::mousePressEvent(QMouseEvent *event)
         return;
     }
 
-    const int pos = (orientation() == Qt::Horizontal)
-        ? event->position().toPoint().x()
-        : event->position().toPoint().y();
+    QStyleOptionSlider option;
+    initStyleOption(&option);
 
+    const QRect handleRect = style()->subControlRect(
+        QStyle::CC_Slider, &option, QStyle::SC_SliderHandle, this);
+
+    const QPoint point = event->position().toPoint();
+
+    // Normal Qt dragging if the user clicked the handle itself.
+    if (handleRect.contains(point)) {
+        m_draggingHandle = true;
+        QSlider::mousePressEvent(event);
+        return;
+    }
+
+    // Click on groove: jump there and allow dragging from there.
+    m_draggingHandle = false;
+
+    const int pos = (orientation() == Qt::Horizontal) ? point.x() : point.y();
     const int value = pixelPosToRangeValue(pos);
 
     setSliderDown(true);
@@ -68,6 +86,11 @@ void ClickableSlider::mousePressEvent(QMouseEvent *event)
 void ClickableSlider::mouseMoveEvent(QMouseEvent *event)
 {
     if (!(event->buttons() & Qt::LeftButton)) {
+        QSlider::mouseMoveEvent(event);
+        return;
+    }
+
+    if (m_draggingHandle) {
         QSlider::mouseMoveEvent(event);
         return;
     }
@@ -90,6 +113,12 @@ void ClickableSlider::mouseMoveEvent(QMouseEvent *event)
 void ClickableSlider::mouseReleaseEvent(QMouseEvent *event)
 {
     if (event->button() != Qt::LeftButton) {
+        QSlider::mouseReleaseEvent(event);
+        return;
+    }
+
+    if (m_draggingHandle) {
+        m_draggingHandle = false;
         QSlider::mouseReleaseEvent(event);
         return;
     }

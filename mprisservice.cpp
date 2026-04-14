@@ -4,11 +4,15 @@
 
 #include <QCryptographicHash>
 #include <QDBusMessage>
+#include <QDebug>
 #include <QFileInfo>
+#include <QLoggingCategory>
 #include <QUrl>
 
+Q_LOGGING_CATEGORY(deedMprisLog, "deed.mpris")
+
 namespace {
-constexpr const char *kServiceName = "org.mpris.MediaPlayer2.deed";
+constexpr const char *kServiceName = "org.mpris.MediaPlayer2.musicplayer";
 constexpr const char *kObjectPath = "/org/mpris/MediaPlayer2";
 constexpr const char *kRootInterface = "org.mpris.MediaPlayer2";
 constexpr const char *kPlayerInterface = "org.mpris.MediaPlayer2.Player";
@@ -42,8 +46,8 @@ void MprisRootAdaptor::Raise()
 bool MprisRootAdaptor::canQuit() const { return false; }
 bool MprisRootAdaptor::canRaise() const { return true; }
 bool MprisRootAdaptor::hasTrackList() const { return false; }
-QString MprisRootAdaptor::identity() const { return "Deed"; }
-QString MprisRootAdaptor::desktopEntry() const { return "deed"; }
+QString MprisRootAdaptor::identity() const { return "MusicPlayer"; }
+QString MprisRootAdaptor::desktopEntry() const { return "musicplayer"; }
 
 QStringList MprisRootAdaptor::supportedUriSchemes() const
 {
@@ -76,14 +80,15 @@ void MprisPlayerAdaptor::Play() { m_player->mprisPlay(); }
 
 void MprisPlayerAdaptor::Seek(qlonglong Offset)
 {
-    m_player->mprisSetPosition(m_player->currentPosition() + Offset);
+    const qlonglong offsetMs = Offset / 1000;
+    m_player->mprisSetPosition(m_player->currentPosition() + offsetMs);
 }
 
 void MprisPlayerAdaptor::SetPosition(const QDBusObjectPath &TrackId, qlonglong Position)
 {
     const QString expected = trackObjectPathForFile(m_player->currentFilePath());
     if (TrackId.path() == expected) {
-        m_player->mprisSetPosition(Position);
+        m_player->mprisSetPosition(Position / 1000);
     }
 }
 
@@ -94,7 +99,12 @@ QString MprisPlayerAdaptor::playbackStatus() const
 
 QString MprisPlayerAdaptor::loopStatus() const
 {
-    return "None";
+    return m_player->loopStatusString();
+}
+
+void MprisPlayerAdaptor::setLoopStatus(const QString &loopStatus)
+{
+    m_player->mprisSetLoopStatus(loopStatus);
 }
 
 double MprisPlayerAdaptor::rate() const
@@ -104,7 +114,12 @@ double MprisPlayerAdaptor::rate() const
 
 bool MprisPlayerAdaptor::shuffle() const
 {
-    return false;
+    return m_player->shuffleEnabled();
+}
+
+void MprisPlayerAdaptor::setShuffle(bool shuffle)
+{
+    m_player->mprisSetShuffle(shuffle);
 }
 
 QVariantMap MprisPlayerAdaptor::metadata() const
@@ -171,8 +186,26 @@ MprisService::MprisService(PlayerWindow *player)
       m_playerAdaptor(new MprisPlayerAdaptor(player)),
       m_connection(QDBusConnection::sessionBus())
 {
-    m_connection.registerService(kServiceName);
-    m_connection.registerObject(kObjectPath, player, QDBusConnection::ExportAdaptors);
+    if (!m_connection.isConnected()) {
+        qCWarning(deedMprisLog) << "Session bus unavailable; MPRIS integration disabled";
+        return;
+    }
+
+    m_serviceRegistered = m_connection.registerService(kServiceName);
+    if (!m_serviceRegistered) {
+        qCWarning(deedMprisLog) << "Failed to register MPRIS service" << kServiceName
+                                << "-" << m_connection.lastError().message();
+        return;
+    }
+
+    m_objectRegistered = m_connection.registerObject(kObjectPath, player, QDBusConnection::ExportAdaptors);
+    if (!m_objectRegistered) {
+        qCWarning(deedMprisLog) << "Failed to register MPRIS object" << kObjectPath
+                                << "-" << m_connection.lastError().message();
+        m_connection.unregisterService(kServiceName);
+        m_serviceRegistered = false;
+        return;
+    }
 
     connect(player, &PlayerWindow::mprisPlaybackStateChanged,
             this, &MprisService::notifyPlaybackStateChanged);
@@ -182,17 +215,41 @@ MprisService::MprisService(PlayerWindow *player)
             this, &MprisService::notifyPositionChanged);
     connect(player, &PlayerWindow::mprisVolumeChanged,
             this, &MprisService::notifyVolumeChanged);
+
+    m_isAvailable = true;
+    qCDebug(deedMprisLog) << "MPRIS registered successfully";
+}
+
+MprisService::~MprisService()
+{
+    if (m_objectRegistered) {
+        m_connection.unregisterObject(kObjectPath);
+    }
+    if (m_serviceRegistered) {
+        m_connection.unregisterService(kServiceName);
+    }
+}
+
+bool MprisService::isAvailable() const
+{
+    return m_isAvailable;
 }
 
 void MprisService::emitPropertiesChanged(const QString &interfaceName, const QVariantMap &changedProperties)
 {
+    if (!m_isAvailable) {
+        return;
+    }
+
     QDBusMessage msg = QDBusMessage::createSignal(
         kObjectPath,
         "org.freedesktop.DBus.Properties",
         "PropertiesChanged");
 
     msg << interfaceName << changedProperties << QStringList{};
-    m_connection.send(msg);
+    if (!m_connection.send(msg)) {
+        qCWarning(deedMprisLog) << "Failed to send MPRIS PropertiesChanged for" << interfaceName;
+    }
 }
 
 void MprisService::notifyPlaybackStateChanged()
@@ -212,7 +269,11 @@ void MprisService::notifyMetadataChanged()
     emitPropertiesChanged(kPlayerInterface, {
         {"Metadata", m_playerAdaptor->metadata()},
         {"CanSeek", !m_player->currentFilePath().isEmpty()},
-        {"Position", static_cast<qlonglong>(m_player->currentPosition() * 1000)}
+        {"Position", static_cast<qlonglong>(m_player->currentPosition() * 1000)},
+        {"LoopStatus", m_player->loopStatusString()},
+        {"Shuffle", m_player->shuffleEnabled()},
+        {"CanGoNext", m_player->canGoNext()},
+        {"CanGoPrevious", m_player->canGoPrevious()}
     });
 }
 

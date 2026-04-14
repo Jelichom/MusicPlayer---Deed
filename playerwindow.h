@@ -3,31 +3,33 @@
 
 #include <QHash>
 #include <QMainWindow>
-#include <QSet>
 #include <QStringList>
-#include <pulse/subscribe.h>
+#include <QSystemTrayIcon>
+#include <QListWidget>
+#include <QMenu>
+
+#include "trackmetadata.h"
 
 class QPushButton;
 class QLabel;
-class QListWidgetItem;
-class QMediaPlayer;
-class QAudioOutput;
+class QTableWidgetItem;
+class GstPlayerBackend;
 class QDragEnterEvent;
 class QDropEvent;
 class QCloseEvent;
 class QPoint;
 class QWidget;
 class QResizeEvent;
-class QNetworkAccessManager;
-class QNetworkReply;
+
 
 class ClickableSlider;
 class PlaylistWidget;
 class MprisService;
-
-struct pa_threaded_mainloop;
-struct pa_context;
-struct pa_sink_input_info;
+class CoverArtManager;
+class PlaybackNotificationManager;
+class LyricsManager;
+class QSplitter;
+class QStackedWidget;
 
 class PlayerWindow : public QMainWindow
 {
@@ -35,12 +37,15 @@ class PlayerWindow : public QMainWindow
 
 public:
     explicit PlayerWindow(QWidget *parent = nullptr);
-    ~PlayerWindow();
+    ~PlayerWindow() override;
+
+    void handleCommandLineLaunch(const QStringList &files, bool fromRunningInstance);
 
     QString currentFilePath() const;
     QString currentTrackTitle() const;
     QString currentTrackArtist() const;
     QString currentTrackAlbum() const;
+    QString currentTrackNumber() const;
     QString currentCoverArtPath() const;
     qint64 currentPosition() const;
     qint64 currentDuration() const;
@@ -51,6 +56,8 @@ public:
     bool canPause() const;
     bool canControl() const;
     QString playbackStatusString() const;
+    QString loopStatusString() const;
+    bool shuffleEnabled() const;
 
 public slots:
     void mprisPlay();
@@ -61,6 +68,8 @@ public slots:
     void mprisPrevious();
     void mprisSetPosition(qint64 position);
     void mprisSetVolume(double volume);
+    void mprisSetLoopStatus(const QString &loopStatus);
+    void mprisSetShuffle(bool enabled);
     void mprisRaise();
 
 signals:
@@ -75,21 +84,34 @@ protected:
     void closeEvent(QCloseEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
 
-private slots:
-    void onCoverSearchFinished();
-    void onCoverDownloadFinished();
-
 private:
+    enum RepeatMode {
+        RepeatNone,
+        RepeatAll,
+        RepeatOne
+    };
+
+
     void setupUi();
     void setupConnections();
 
     void updateTimeLabel(qint64 position, qint64 duration);
     QString formatTime(qint64 ms) const;
 
+    void openOpenFilesDialog();
     void addFilesToPlaylist(const QStringList &files);
-    void insertFilesIntoPlaylist(const QStringList &files, int row);
-    void loadTrack(int index, bool autoPlay, qint64 startPosition = 0);
+    void insertFilesIntoPlaylist(const QStringList &files, int row, bool allowDuplicates = false);
+    void replacePlaylist(const QStringList &files, bool autoPlay);
+    void queueFilesNext(const QStringList &files);
+    void resetPlayerUi();
+    void loadTrack(int index, bool autoPlay, qint64 startPosition = 0, bool notifyTrackChange = true);
     void updatePlayPauseButton();
+    void updateRepeatButton();
+    void updateShuffleButton();
+    void updatePlaylistSummary();
+    qint64 totalPlaylistDurationMs() const;
+    int nextTrackIndex(bool fromUserAction) const;
+    int previousTrackIndex() const;
 
     void refreshPlaylistWidget();
     void updatePlaylistSelection();
@@ -97,9 +119,11 @@ private:
     void rebuildPlaylistFromWidgetOrder();
     void showPlaylistContextMenu(const QPoint &pos);
 
+    void clearCurrentTrackDisplay(bool rememberForResume);
     void removeSelectedTracks();
     void moveSelectedTracksUp();
     void moveSelectedTracksDown();
+    void clearPlaylist();
 
     void loadSettings();
     void saveSettings();
@@ -108,88 +132,84 @@ private:
     void updateCoverArt();
     void updateVolumeLabel();
     void updateHeaderSizing();
+    void updateLyricsView();
+    void updateLyricsCurrentLine();
+    void refreshLyricsPlaylistView();
+    void toggleLyricsPage();
+    void updateLyricsStatusLabel();
+    void updateLyricsSyncButtons();
+
+    void requestPlay();
+    void requestPause();
+    void requestPlayPauseToggle();
+    void notifyPlaybackStartedIfAvailable();
+    void notifyPlaybackPausedIfAvailable();
 
     QList<int> selectedRowsSorted() const;
-
-    QString readTitleWithTagLib(const QString &filePath) const;
-    QString readArtistWithTagLib(const QString &filePath) const;
-    QString readAlbumWithTagLib(const QString &filePath) const;
-
-    QString extractCoverArtToCache(const QString &filePath) const;
-    QString cacheCoverArt(const QString &filePath,
-                          const QByteArray &imageData,
-                          const QString &mimeType) const;
-    QString findFolderCoverArt(const QString &filePath) const;
-    QString saveDownloadedCoverArt(const QString &filePath,
-                                   const QByteArray &imageData,
-                                   const QString &contentType) const;
-
-    void queueOnlineCoverArtFetch(const QString &filePath);
-    void startCoverDownloadAttempt(const QString &filePath,
-                                   const QStringList &mbids,
-                                   int index);
-
-    void startPulseSync();
-    void stopPulseSync();
-    void requestPulseSinkInputRefresh();
-    void setPulseStreamVolume(int value);
-
-    void applyPulseVolumeToUi(int value);
-    void updatePulseSinkInputFromInfo(const pa_sink_input_info *info);
-
-    static void pulseContextStateCallback(pa_context *context, void *userdata);
-    static void pulseSubscribeCallback(pa_context *context,
-                                        pa_subscription_event_type_t eventType,
-                                        uint32_t index,
-                                        void *userdata);
-    static void pulseSinkInputInfoListCallback(pa_context *context,
-                                               const pa_sink_input_info *info,
-                                               int eol,
-                                               void *userdata);
-
+    void ensureMetadataCached(const QString &filePath);
+    void rebuildMetadataCache();
+    const TrackMetadata::Info *cachedMetadata(const QString &filePath) const;
     QString playlistDisplayTextForFile(const QString &filePath) const;
-    void rebuildTitleCache();
+    QString playlistArtistForFile(const QString &filePath) const;
+    QString playlistAlbumForFile(const QString &filePath) const;
+    QString playlistLengthForFile(const QString &filePath) const;
+    QString playlistBitrateForFile(const QString &filePath) const;
+    QString playlistFileTypeForFile(const QString &filePath) const;
+    QString playlistTrackNumberForFile(const QString &filePath) const;
 
     QPushButton *openButton;
     QPushButton *previousButton;
     QPushButton *playPauseButton;
     QPushButton *nextButton;
     QPushButton *stopButton;
+    QPushButton *repeatButton;
+    QPushButton *shuffleButton;
+    QPushButton *lyricsDelayButton;
+    QPushButton *lyricsResetSyncButton;
+    QPushButton *lyricsFastenButton;
+    QPushButton *lyricsToggleButton;
 
+    QSystemTrayIcon *trayIcon;
+    QMenu *trayMenu;
     QWidget *headerWidget;
+    QWidget *playbackPanel;
     QLabel *coverLabel;
     QLabel *titleLabel;
     QLabel *albumLabel;
-    QLabel *timeLabel;
+    QLabel *playlistSummaryLabel;
+    QLabel *lyricsStatusLabel;
+    QLabel *currentTimeLabel;
+    QLabel *remainingTimeLabel;
     QLabel *volumePercentLabel;
 
     ClickableSlider *positionSlider;
+    QStackedWidget *contentStack;
+    QWidget *lyricsPage;
+    QSplitter *lyricsSplitter;
+    QListWidget *lyricsListWidget;
+    QListWidget *lyricsPlaylistWidget;
     ClickableSlider *volumeSlider;
-
     PlaylistWidget *playlistWidget;
 
-    QMediaPlayer *player;
-    QAudioOutput *audioOutput;
+    GstPlayerBackend *player;
     MprisService *mprisService;
-    QNetworkAccessManager *networkManager;
+    CoverArtManager *coverArtManager;
+    PlaybackNotificationManager *notificationManager;
+    LyricsManager *lyricsManager;
 
-    pa_threaded_mainloop *pulseMainloop;
-    pa_context *pulseContext;
-    uint32_t currentSinkInputIndex;
-    bool pulseReady;
     bool updatingVolumeFromMixer;
-
     QStringList playlist;
     int currentIndex;
-
-    QHash<QString, QString> titleCache;
-    QHash<QString, QString> coverArtCache;
-    QSet<QString> attemptedOnlineCoverFetches;
-
+    int resumeIndex;
     qint64 pendingRestorePosition;
     bool pendingRestoreAutoPlay;
-
     bool isUserSeeking;
+    RepeatMode repeatMode;
+    bool shuffleOn;
+    QList<int> shuffleHistory;
+    bool suppressShuffleHistoryRecording;
+
+    QHash<QString, TrackMetadata::Info> metadataCache;
 };
 
 #endif

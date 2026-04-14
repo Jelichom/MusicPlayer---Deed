@@ -46,9 +46,9 @@ class MprisPlayerAdaptor : public QDBusAbstractAdaptor
     Q_CLASSINFO("D-Bus Interface", "org.mpris.MediaPlayer2.Player")
 
     Q_PROPERTY(QString PlaybackStatus READ playbackStatus)
-    Q_PROPERTY(QString LoopStatus READ loopStatus)
+    Q_PROPERTY(QString LoopStatus READ loopStatus WRITE setLoopStatus)
     Q_PROPERTY(double Rate READ rate)
-    Q_PROPERTY(bool Shuffle READ shuffle)
+    Q_PROPERTY(bool Shuffle READ shuffle WRITE setShuffle)
     Q_PROPERTY(QVariantMap Metadata READ metadata)
     Q_PROPERTY(double Volume READ volume WRITE setVolume)
     Q_PROPERTY(qlonglong Position READ position)
@@ -77,8 +77,10 @@ public slots:
 public:
     QString playbackStatus() const;
     QString loopStatus() const;
+    void setLoopStatus(const QString &loopStatus);
     double rate() const;
     bool shuffle() const;
+    void setShuffle(bool shuffle);
     QVariantMap metadata() const;
     double volume() const;
     void setVolume(double volume);
@@ -102,6 +104,9 @@ class MprisService : public QObject
 
 public:
     explicit MprisService(PlayerWindow *player);
+    ~MprisService() override;
+
+    bool isAvailable() const;
 
 private slots:
     void notifyPlaybackStateChanged();
@@ -116,6 +121,9 @@ private:
     MprisRootAdaptor *m_rootAdaptor;
     MprisPlayerAdaptor *m_playerAdaptor;
     QDBusConnection m_connection;
+    bool m_isAvailable = false;
+    bool m_serviceRegistered = false;
+    bool m_objectRegistered = false;
 };
 
 #endif

@@ -1,0 +1,5 @@
+/home/nikos/projects/MusicPlayer/build/CMakeFiles/Velion.dir
+/home/nikos/projects/MusicPlayer/build/CMakeFiles/edit_cache.dir
+/home/nikos/projects/MusicPlayer/build/CMakeFiles/rebuild_cache.dir
+/home/nikos/projects/MusicPlayer/build/CMakeFiles/Velion_autogen_timestamp_deps.dir
+/home/nikos/projects/MusicPlayer/build/CMakeFiles/Velion_autogen.dir

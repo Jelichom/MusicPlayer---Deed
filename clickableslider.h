@@ -17,6 +17,7 @@ protected:
 
 private:
     int pixelPosToRangeValue(int pos) const;
+    bool m_draggingHandle = false;
 };
 
 #endif
